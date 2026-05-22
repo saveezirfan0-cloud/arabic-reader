@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, BookOpen, Trash2 } from 'lucide-react'
+import { Plus, BookOpen, Trash2, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { createText, deleteText, listTexts } from '@/lib/queries'
+import { extractFile } from '@/lib/extract'
 import type { Text } from '@/types/database'
 
 export function LibraryPage() {
@@ -165,28 +166,62 @@ function AddTextDialog({
   onClose: () => void
   onCreated: () => void
 }) {
+  const [tab, setTab] = useState<'paste' | 'upload'>('paste')
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [warning, setWarning] = useState<string | null>(null)
+  const [fileName, setFileName] = useState<string | null>(null)
+  const [extracting, setExtracting] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (open) {
+      setTab('paste')
       setTitle('')
       setContent('')
       setError(null)
+      setWarning(null)
+      setFileName(null)
+      setExtracting(false)
     }
   }, [open])
 
+  const onFilePicked = async (file: File) => {
+    setError(null)
+    setWarning(null)
+    setExtracting(true)
+    setFileName(file.name)
+    try {
+      const result = await extractFile(file)
+      setTitle((t) => t || result.title)
+      setContent(result.content)
+      if (result.warning) setWarning(result.warning)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not read file')
+      setFileName(null)
+    } finally {
+      setExtracting(false)
+    }
+  }
+
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    const file = e.dataTransfer.files?.[0]
+    if (file) onFilePicked(file)
+  }
+
   const submit = async () => {
     if (!content.trim()) {
-      setError('Paste some Arabic text first.')
+      setError('Add some text first — paste it or upload a file.')
       return
     }
     setBusy(true)
     setError(null)
     try {
-      await createText({ title: title || 'Untitled', content })
+      const source = tab === 'upload' ? 'upload' : 'paste'
+      await createText({ title: title || 'Untitled', content, source })
       onCreated()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create')
@@ -195,9 +230,29 @@ function AddTextDialog({
     }
   }
 
+  const tabBtn = (id: 'paste' | 'upload', label: string) => (
+    <button
+      onClick={() => setTab(id)}
+      className="text-xs uppercase tracking-[0.16em] pb-2 transition-colors"
+      style={{
+        color: tab === id ? 'var(--color-ink)' : 'var(--color-ink-faint)',
+        borderBottom: tab === id ? '2px solid var(--color-accent)' : '2px solid transparent',
+      }}
+    >
+      {label}
+    </button>
+  )
+
   return (
     <Modal open={open} onClose={onClose} title="Add text" maxWidth="600px">
       <div className="flex flex-col gap-4">
+        {/* Tabs */}
+        <div className="flex gap-6 border-b border-[var(--color-border)] -mt-1">
+          {tabBtn('paste', 'Paste')}
+          {tabBtn('upload', 'Upload file')}
+        </div>
+
+        {/* Title (shared) */}
         <label className="flex flex-col gap-1.5">
           <span
             className="text-xs uppercase tracking-[0.14em]"
@@ -218,36 +273,108 @@ function AddTextDialog({
           />
         </label>
 
-        <label className="flex flex-col gap-1.5">
-          <span
-            className="text-xs uppercase tracking-[0.14em]"
-            style={{ color: 'var(--color-ink-faint)' }}
-          >
-            Arabic text
-          </span>
-          <textarea
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            rows={10}
-            placeholder="ألصق النص العربي هنا..."
-            dir="rtl"
-            className="arabic px-3 py-3 rounded-sm border outline-none resize-y"
-            style={{
-              background: 'var(--color-paper)',
-              borderColor: 'var(--color-border)',
-              color: 'var(--color-ink)',
-              fontSize: '1.05rem',
-              lineHeight: 1.9,
-              minHeight: '200px',
-            }}
-          />
-        </label>
+        {tab === 'paste' ? (
+          <label className="flex flex-col gap-1.5">
+            <span
+              className="text-xs uppercase tracking-[0.14em]"
+              style={{ color: 'var(--color-ink-faint)' }}
+            >
+              Arabic text
+            </span>
+            <textarea
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              rows={10}
+              placeholder="ألصق النص العربي هنا..."
+              dir="rtl"
+              className="arabic px-3 py-3 rounded-sm border outline-none resize-y"
+              style={{
+                background: 'var(--color-paper)',
+                borderColor: 'var(--color-border)',
+                color: 'var(--color-ink)',
+                fontSize: '1.05rem',
+                lineHeight: 1.9,
+                minHeight: '200px',
+              }}
+            />
+          </label>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {/* Drop zone */}
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={onDrop}
+              className="flex flex-col items-center justify-center gap-2 py-10 px-4 rounded-sm border-2 border-dashed cursor-pointer transition-colors text-center hover:bg-[var(--color-surface-sunk)]"
+              style={{ borderColor: 'var(--color-border-strong)' }}
+            >
+              <Upload size={20} strokeWidth={1.5} color="var(--color-ink-faint)" />
+              <p className="text-sm" style={{ color: 'var(--color-ink-soft)' }}>
+                {extracting
+                  ? 'Reading file…'
+                  : fileName
+                    ? fileName
+                    : 'Click to choose, or drop a file here'}
+              </p>
+              <p className="text-xs" style={{ color: 'var(--color-ink-faint)' }}>
+                PDF, EPUB, or TXT
+              </p>
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.epub,.txt,application/pdf,application/epub+zip,text/plain"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0]
+                if (f) onFilePicked(f)
+              }}
+            />
 
+            {/* Preview of extracted text */}
+            {content && !extracting && (
+              <div>
+                <p
+                  className="text-[10px] uppercase tracking-[0.2em] mb-1.5"
+                  style={{ color: 'var(--color-ink-faint)' }}
+                >
+                  Preview · {content.split(/\s+/).filter(Boolean).length} words
+                </p>
+                <p
+                  className="arabic px-3 py-3 rounded-sm border max-h-40 overflow-auto"
+                  dir="rtl"
+                  style={{
+                    background: 'var(--color-paper)',
+                    borderColor: 'var(--color-border)',
+                    color: 'var(--color-ink-soft)',
+                    fontSize: '0.95rem',
+                    lineHeight: 1.8,
+                  }}
+                >
+                  {content.slice(0, 400)}
+                  {content.length > 400 ? '…' : ''}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {warning && (
+          <p
+            className="text-xs p-3 rounded-sm"
+            style={{
+              background: 'rgba(180, 130, 70, 0.10)',
+              color: 'var(--color-accent-deep)',
+            }}
+          >
+            {warning}
+          </p>
+        )}
         {error && <p className="text-xs" style={{ color: '#a55432' }}>{error}</p>}
 
         <div className="flex justify-end gap-2 mt-2">
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button onClick={submit} disabled={busy}>
+          <Button onClick={submit} disabled={busy || extracting}>
             {busy ? 'Saving…' : 'Save'}
           </Button>
         </div>
