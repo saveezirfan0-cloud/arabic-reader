@@ -1,28 +1,23 @@
 /**
  * Arabic text utilities.
- *
- * This file stays intentionally small for Step 1 — full tokenization + morphology
- * handling lands in Step 5 (reader) and Step 6 (Edge Functions). For now we expose
- * just the primitives the landing page + future code will need.
  */
 
-// Arabic Unicode ranges:
-//   U+0600–U+06FF  Arabic
-//   U+0750–U+077F  Arabic Supplement
-//   U+08A0–U+08FF  Arabic Extended-A
-//   U+FB50–U+FDFF  Arabic Presentation Forms-A
-//   U+FE70–U+FEFF  Arabic Presentation Forms-B
+// Arabic Unicode ranges
 const ARABIC_LETTER_RE = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
 
 // Diacritics (tashkeel): fatha, kasra, damma, sukun, shadda, tanwin, etc.
 const TASHKEEL_RE = /[\u064B-\u065F\u0670\u06D6-\u06ED]/g
 
-/** True if the string contains any Arabic letter. */
+// Word-break punctuation we split on (whitespace + Arabic + Latin punct).
+const WORD_BREAK_RE = /([\s\u060C\u061B\u061F.,!?؟،؛:"'()\[\]{}…—–\-«»]+)/
+
+// Sentence-end punctuation: period, exclamation, Arabic question mark, Arabic full stop
+const SENTENCE_END_RE = /([.!?؟])/g
+
 export function hasArabic(str: string): boolean {
   return ARABIC_LETTER_RE.test(str)
 }
 
-/** Strip tashkeel (diacritics). Useful for matching against dictionary lemmas. */
 export function stripTashkeel(str: string): string {
   return str.replace(TASHKEEL_RE, '')
 }
@@ -34,14 +29,65 @@ export function normalizeArabic(str: string): string {
     .replace(/ى/g, 'ي')
     .replace(/ة/g, 'ه')
     .replace(/ـ/g, '') // tatweel
+    .trim()
 }
 
 /**
- * Naive word tokenizer for Arabic text. Splits on whitespace + punctuation.
- * Step 5 will replace this with a proper sentence-aware tokenizer.
+ * Tokenize text into segments: { kind: 'word' | 'space', text }
+ * Preserves whitespace + punctuation as separate tokens for accurate re-render.
  */
-export function tokenize(text: string): string[] {
-  return text
-    .split(/[\s\u060C\u061B\u061F.,!?؟،؛:"'()\[\]{}…—–-]+/)
-    .filter((t) => t.length > 0 && hasArabic(t))
+export interface Token {
+  kind: 'word' | 'space'
+  text: string
+  /** The normalized lemma — for words only */
+  lemma?: string
+  /** Position in original text (start index) */
+  start: number
+}
+
+export function tokenize(text: string): Token[] {
+  const parts = text.split(WORD_BREAK_RE)
+  const tokens: Token[] = []
+  let pos = 0
+  for (const part of parts) {
+    if (part.length === 0) continue
+    if (hasArabic(part)) {
+      tokens.push({ kind: 'word', text: part, lemma: normalizeArabic(part), start: pos })
+    } else {
+      tokens.push({ kind: 'space', text: part, start: pos })
+    }
+    pos += part.length
+  }
+  return tokens
+}
+
+/**
+ * Find the sentence a given token belongs to. Returns the full sentence as a string.
+ * Splits on . ! ? ؟ and Arabic line breaks.
+ */
+export function findSentence(text: string, position: number): string {
+  // Find sentence boundary BEFORE position
+  let start = 0
+  let end = text.length
+
+  for (let i = position; i >= 0; i--) {
+    const ch = text[i]
+    if (ch && SENTENCE_END_RE.test(ch)) {
+      start = i + 1
+      break
+    }
+  }
+  SENTENCE_END_RE.lastIndex = 0
+
+  // Find sentence boundary AFTER position
+  for (let i = position; i < text.length; i++) {
+    const ch = text[i]
+    if (ch && SENTENCE_END_RE.test(ch)) {
+      end = i + 1
+      break
+    }
+  }
+  SENTENCE_END_RE.lastIndex = 0
+
+  return text.slice(start, end).trim()
 }

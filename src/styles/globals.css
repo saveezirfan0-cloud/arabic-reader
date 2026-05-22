@@ -1,46 +1,8 @@
 @import "tailwindcss";
 
 /* ==========================================================================
-   Self-hosted fonts
-   Add the .woff2 files to /public/fonts/ — see README for download links.
-   ========================================================================== */
-
-@font-face {
-  font-family: 'Amiri';
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url('/fonts/Amiri-Regular.woff2') format('woff2');
-  unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FEFF;
-}
-
-@font-face {
-  font-family: 'Amiri';
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url('/fonts/Amiri-Bold.woff2') format('woff2');
-}
-
-@font-face {
-  font-family: 'Reem Kufi';
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url('/fonts/ReemKufi-Medium.woff2') format('woff2');
-}
-
-@font-face {
-  font-family: 'Fraunces';
-  font-style: normal;
-  font-weight: 400 700;
-  font-display: swap;
-  src: url('/fonts/Fraunces-Variable.woff2') format('woff2-variations');
-}
-
-/* ==========================================================================
    Theme — calm academia
-   Warm paper, deep ink, restrained accent. Color states for vocab levels.
+   Fonts come from @fontsource (imported in main.tsx).
    ========================================================================== */
 
 @theme {
@@ -58,7 +20,7 @@
   --color-accent-soft: #B8895C;
   --color-accent-deep: #5E3A18;
 
-  /* Word state highlights — subtle, all warm-tinted */
+  /* Word state highlights */
   --color-word-unknown: rgba(180, 130, 70, 0.22);
   --color-word-learning: rgba(140, 100, 55, 0.13);
   --color-word-mined: rgba(110, 80, 40, 0.08);
@@ -72,12 +34,12 @@
   /* Typography */
   --font-arabic: 'Amiri', 'Noto Naskh Arabic', 'Times New Roman', serif;
   --font-arabic-display: 'Reem Kufi', 'Amiri', serif;
-  --font-display: 'Fraunces', Georgia, serif;
-  --font-sans: 'Fraunces', Georgia, serif;
+  --font-display: 'Fraunces Variable', 'Fraunces', Georgia, serif;
+  --font-sans: 'Fraunces Variable', 'Fraunces', Georgia, serif;
 }
 
 /* ==========================================================================
-   Base styles
+   Base
    ========================================================================== */
 
 html, body {
@@ -91,10 +53,13 @@ html, body {
 
 body {
   min-height: 100dvh;
-  /* Subtle paper grain — pure CSS, no asset needed */
   background-image:
     radial-gradient(circle at 20% 30%, rgba(139, 90, 43, 0.025) 0%, transparent 50%),
     radial-gradient(circle at 80% 70%, rgba(94, 58, 24, 0.02) 0%, transparent 50%);
+}
+
+#root {
+  min-height: 100dvh;
 }
 
 ::selection {
@@ -103,8 +68,7 @@ body {
 }
 
 /* ==========================================================================
-   Arabic typography
-   Always RTL, generous leading for tashkeel.
+   Arabic typography — always RTL, generous leading for tashkeel
    ========================================================================== */
 
 [lang="ar"], .arabic {
@@ -175,13 +139,22 @@ body {
     0 8px 24px -12px rgba(42, 31, 20, 0.08);
 }
 
-/* Hairline rule used throughout */
 .rule {
   height: 1px;
   background: linear-gradient(90deg, transparent, var(--color-border-strong), transparent);
 }
 
-/* Subtle fade-in for first paint */
+.line-clamp-1 {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ==========================================================================
+   Animations
+   ========================================================================== */
+
 @keyframes fade-up {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
