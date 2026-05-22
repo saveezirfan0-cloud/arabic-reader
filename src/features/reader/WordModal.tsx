@@ -65,10 +65,14 @@ export function WordModal({
     setAnalysis(null)
     setAnalyzing(true)
     analyzeWord(token.text, sentence)
-      .then(async (a) => {
+      .then((a) => {
+        // Show the analysis immediately — this enables the Mine button.
         setAnalysis(a)
-        // Save enrichment to DB
-        const updated = await enrichVocab(vocab.id, {
+        setAnalyzing(false)
+
+        // Persist enrichment separately. If this fails (e.g. a DB column is
+        // missing), it must NOT clear the analysis or block mining — just log it.
+        enrichVocab(vocab.id, {
           root: a.root,
           definition: a.definition,
           translation: a.translation,
@@ -79,10 +83,13 @@ export function WordModal({
           senses: a.senses as never,
           morphology: a.morphology as never,
         })
-        onVocabUpdated(updated)
+          .then((updated) => onVocabUpdated(updated))
+          .catch((e) => console.error('enrichVocab failed (analysis still usable):', e))
       })
-      .catch((e) => setError(e instanceof Error ? e.message : 'Analysis failed'))
-      .finally(() => setAnalyzing(false))
+      .catch((e) => {
+        setError(e instanceof Error ? e.message : 'Analysis failed')
+        setAnalyzing(false)
+      })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, token?.start])
 
@@ -117,7 +124,7 @@ export function WordModal({
   }
 
   const onMine = async () => {
-    if (!vocab || !analysis || !token) return
+    if (!vocab || !token) return
     setBusy(true)
     try {
       await createSentenceCard({
@@ -125,10 +132,11 @@ export function WordModal({
         text_id: textId,
         sentence,
         word: token.text,
-        translation: analysis.translation,
-        sentence_translation: analysis.sentence_translation || '',
+        // Fall back gracefully if analysis didn't load — the card still works,
+        // just without an English gloss on the back.
+        translation: analysis?.translation ?? '',
+        sentence_translation: analysis?.sentence_translation ?? '',
       })
-      // Mark vocab as learning
       const updated = await setWordState(vocab.id, 'learning')
       onVocabUpdated(updated)
       setMined(true)
@@ -314,7 +322,7 @@ export function WordModal({
       {/* Actions — Known/Learning/Ignore always available (no LLM needed).
           Mine requires analysis since the card back uses the translation. */}
       <div className="flex flex-wrap gap-2 mt-6 pt-5 border-t border-[var(--color-border)]">
-        <Button onClick={onMine} disabled={busy || mined || !analysis || analyzing} size="sm">
+        <Button onClick={onMine} disabled={busy || mined || analyzing || !vocab} size="sm">
           <BookmarkPlus size={13} strokeWidth={1.5} />
           {mined ? 'Mined' : analyzing ? 'Analyzing…' : 'Mine sentence'}
         </Button>
