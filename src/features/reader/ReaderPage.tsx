@@ -37,14 +37,18 @@ export function ReaderPage() {
   const tokens = useMemo(() => (text ? tokenize(text.content) : []), [text])
 
   const onWordTap = async (tok: Token) => {
-    if (!tok.lemma) return
+    // Open the modal immediately so the tap always feels responsive,
+    // even if vocab creation is slow or fails.
     setSelectedToken(tok)
+    setSelectedVocab(null)
 
-    // Get or create vocab entry (bumps encounter count)
+    // Fall back to the surface form if normalization produced an empty lemma.
+    const surface = tok.text
+    if (!surface.trim()) return
+
     try {
-      const v = await getOrCreateVocab({ surface: tok.text })
+      const v = await getOrCreateVocab({ surface })
       setSelectedVocab(v)
-      // Update local vocab map
       setVocab((prev) => {
         const next = new Map(prev)
         next.set(v.lemma, v)
@@ -52,6 +56,7 @@ export function ReaderPage() {
       })
     } catch (err) {
       console.error('Failed to get/create vocab', err)
+      // Modal still shows; user can read the word even if save failed.
     }
   }
 

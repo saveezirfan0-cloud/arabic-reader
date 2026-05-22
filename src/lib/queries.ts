@@ -5,6 +5,7 @@
 import { supabase } from './supabase'
 import type { Card, Text, Vocabulary, WordState } from '@/types/database'
 import { normalizeArabic } from './arabic'
+import { cleanText } from './extract'
 import { schedule, type Rating, type SrsState } from './srs'
 
 // ─── Texts ──────────────────────────────────────────────────────────────────
@@ -32,16 +33,15 @@ export async function createText(input: {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Not authenticated')
 
-  const word_count = input.content
-    .split(/\s+/)
-    .filter((w) => w.length > 0).length
+  const content = cleanText(input.content)
+  const word_count = content.split(/\s+/).filter((w) => w.length > 0).length
 
   const { data, error } = await supabase
     .from('texts')
     .insert({
       user_id: user.id,
       title: input.title.trim() || 'Untitled',
-      content: input.content,
+      content,
       source: input.source ?? 'paste',
       word_count,
     })

@@ -8,8 +8,11 @@ const ARABIC_LETTER_RE = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\
 // Diacritics (tashkeel): fatha, kasra, damma, sukun, shadda, tanwin, etc.
 const TASHKEEL_RE = /[\u064B-\u065F\u0670\u06D6-\u06ED]/g
 
-// Word-break punctuation we split on (whitespace + Arabic + Latin punct).
-const WORD_BREAK_RE = /([\s\u060C\u061B\u061F.,!?؟،؛:"'()\[\]{}…—–\-«»]+)/
+// Word-break punctuation we split on. Includes ASCII whitespace (\s) plus
+// invisible characters common in PDF/EPUB extraction: non-breaking space,
+// zero-width space/joiner, narrow no-break space, etc.
+const WORD_BREAK_RE =
+  /([\s\u00A0\u200B\u200C\u200D\u202F\u2060\uFEFF\u060C\u061B\u061F.,!?؟،؛:"'()\[\]{}…—–\-«»]+)/
 
 // Sentence-end punctuation: period, exclamation, Arabic question mark, Arabic full stop
 const SENTENCE_END_RE = /([.!?؟])/g

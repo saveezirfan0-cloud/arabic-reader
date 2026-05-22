@@ -28,6 +28,27 @@ function baseName(filename: string): string {
   return filename.replace(/\.[^.]+$/, '').trim() || 'Untitled'
 }
 
+/**
+ * Normalize extracted text: convert invisible/exotic spaces to regular spaces,
+ * collapse runs of whitespace, and trim. This is critical for uploaded files —
+ * PDFs and EPUBs frequently insert non-breaking spaces, zero-width spaces, and
+ * other characters that would otherwise break word tokenization in the reader.
+ */
+export function cleanText(raw: string): string {
+  return raw
+    // Normalize all exotic spaces to a normal space
+    .replace(/[\u00A0\u202F\u2060\uFEFF\u2007\u2009]/g, ' ')
+    // Remove zero-width characters entirely
+    .replace(/[\u200B\u200C\u200D]/g, '')
+    // Normalize line endings
+    .replace(/\r\n?/g, '\n')
+    // Collapse 3+ newlines to a paragraph break
+    .replace(/\n{3,}/g, '\n\n')
+    // Collapse runs of spaces/tabs (but keep newlines)
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim()
+}
+
 // ─── PDF ─────────────────────────────────────────────────────────────────
 
 export async function extractPdf(file: File): Promise<ExtractResult> {
@@ -53,7 +74,7 @@ export async function extractPdf(file: File): Promise<ExtractResult> {
     if (pageText) pages.push(pageText)
   }
 
-  const content = pages.join('\n\n')
+  const content = cleanText(pages.join('\n\n'))
   const warning =
     content.length < 20
       ? 'Almost no text was found. This may be a scanned PDF (image-only), which needs OCR — not yet supported.'
@@ -95,7 +116,7 @@ export async function extractEpub(file: File): Promise<ExtractResult> {
     }
   }
 
-  const content = sections.join('\n\n')
+  const content = cleanText(sections.join('\n\n'))
   const warning =
     content.length < 20 ? 'No readable text was found in this EPUB.' : undefined
 
@@ -113,7 +134,7 @@ export async function extractFile(file: File): Promise<ExtractResult> {
     return extractEpub(file)
   }
   if (name.endsWith('.txt') || file.type === 'text/plain') {
-    const content = await file.text()
+    const content = cleanText(await file.text())
     return { title: baseName(file.name), content }
   }
   throw new Error('Unsupported file type. Use PDF, EPUB, or TXT.')
