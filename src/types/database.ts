@@ -46,6 +46,10 @@ export type Vocabulary = {
   definition: string | null
   translation: string | null
   pos: string | null
+  plural: string | null
+  synonyms: Json
+  antonyms: Json
+  senses: Json
   morphology: Json | null
   encounter_count: number
   first_seen_at: string
@@ -141,6 +145,10 @@ export interface Database {
           definition?: string | null
           translation?: string | null
           pos?: string | null
+          plural?: string | null
+          synonyms?: Json
+          antonyms?: Json
+          senses?: Json
           morphology?: Json | null
           encounter_count?: number
           last_seen_at?: string

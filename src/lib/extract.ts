@@ -123,6 +123,67 @@ export async function extractEpub(file: File): Promise<ExtractResult> {
   return { title, content, warning }
 }
 
+// ─── PDF rasterization (for OCR of scanned PDFs) ─────────────────────────
+
+export interface RasterPage {
+  /** base64 JPEG, no data: prefix */
+  data: string
+  pageNumber: number
+}
+
+/**
+ * Render each PDF page to a base64 JPEG image, for OCR.
+ * Used when a PDF has no extractable text layer (i.e. it's scanned).
+ *
+ * `scale` controls resolution — 2.0 is a good balance of legibility vs size.
+ * `onProgress` reports rendering progress (not OCR progress).
+ */
+export async function rasterizePdf(
+  file: File,
+  opts: { scale?: number; maxPages?: number; onProgress?: (done: number, total: number) => void } = {},
+): Promise<RasterPage[]> {
+  const { scale = 2.0, maxPages = 30, onProgress } = opts
+
+  const pdfjsLib = await import('pdfjs-dist')
+  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+    'pdfjs-dist/build/pdf.worker.min.mjs',
+    import.meta.url,
+  ).toString()
+
+  const buf = await file.arrayBuffer()
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise
+  const total = Math.min(pdf.numPages, maxPages)
+  const pages: RasterPage[] = []
+
+  for (let i = 1; i <= total; i++) {
+    const page = await pdf.getPage(i)
+    const viewport = page.getViewport({ scale })
+
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.floor(viewport.width)
+    canvas.height = Math.floor(viewport.height)
+    const ctx = canvas.getContext('2d')
+    if (!ctx) continue
+
+    await page.render({ canvasContext: ctx, viewport }).promise
+
+    // JPEG keeps size manageable; 0.85 quality is plenty for OCR.
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
+    const base64 = dataUrl.split(',')[1] ?? ''
+    pages.push({ data: base64, pageNumber: i })
+
+    onProgress?.(i, total)
+  }
+
+  return pages
+}
+
+/** Quick check: does this PDF have a usable text layer? */
+export async function pdfHasTextLayer(file: File): Promise<boolean> {
+  const result = await extractPdf(file)
+  return result.content.replace(/\s/g, '').length >= 20
+}
+
 // ─── Dispatcher ────────────────────────────────────────────────────────────
 
 export async function extractFile(file: File): Promise<ExtractResult> {

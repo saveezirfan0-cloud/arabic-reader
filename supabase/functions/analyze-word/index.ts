@@ -30,6 +30,10 @@ interface AnalyzeResponse {
   definition: string
   translation: string
   pos: string
+  plural: string | null
+  synonyms: string[]
+  antonyms: string[]
+  senses: string[]
   morphology: Record<string, unknown>
   sentence_translation: string
 }
@@ -47,6 +51,10 @@ Respond with a JSON object describing the word, with these exact keys:
   "definition": "a clear English definition, 1-2 short sentences max",
   "translation": "a single best English word/phrase for this word",
   "pos": "one of: noun, verb, adjective, adverb, particle, pronoun, preposition, conjunction, interjection",
+  "plural": "for nouns/adjectives: the Arabic broken or sound plural WITH diacritics, e.g. كُتُب. null if not a noun/adjective or no common plural.",
+  "synonyms": ["up to 4 Arabic synonyms (مُرادِفات) WITH diacritics. Empty array if none."],
+  "antonyms": ["up to 3 Arabic antonyms (أضْداد) WITH diacritics. Empty array if none."],
+  "senses": ["up to 4 distinct meanings/senses (مَعانٍ) of the word, each a short English phrase. Empty array if only one sense."],
   "morphology": {
     "form": "for verbs, the form number (I-X) or null",
     "tense": "for verbs: past/present/imperative or null",
@@ -57,6 +65,7 @@ Respond with a JSON object describing the word, with these exact keys:
   "sentence_translation": "a natural English translation of the entire sentence"
 }
 
+Always use proper Arabic diacritics (tashkeel) on the synonyms, antonyms, and plural.
 Only output the JSON object. No prose. No code fences.`
 
 Deno.serve(async (req) => {
@@ -88,7 +97,7 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 600,
+        max_tokens: 1024,
         system: SYSTEM_PROMPT,
         messages: [{ role: 'user', content: userMessage }],
       }),

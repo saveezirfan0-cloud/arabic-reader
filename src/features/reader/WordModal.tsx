@@ -51,6 +51,10 @@ export function WordModal({
         definition: vocab.definition,
         translation: vocab.translation,
         pos: vocab.pos ?? '',
+        plural: vocab.plural,
+        synonyms: asStringArray(vocab.synonyms),
+        antonyms: asStringArray(vocab.antonyms),
+        senses: asStringArray(vocab.senses),
         morphology: (vocab.morphology as Record<string, unknown>) ?? {},
         sentence_translation: '',
       })
@@ -69,6 +73,10 @@ export function WordModal({
           definition: a.definition,
           translation: a.translation,
           pos: a.pos,
+          plural: a.plural,
+          synonyms: a.synonyms as never,
+          antonyms: a.antonyms as never,
+          senses: a.senses as never,
           morphology: a.morphology as never,
         })
         onVocabUpdated(updated)
@@ -180,7 +188,7 @@ export function WordModal({
 
       {analysis && !analyzing && (
         <div className="flex flex-col gap-4">
-          <Row label="Translation">
+          <Row label="English meaning">
             <span style={{ color: 'var(--color-ink)', fontWeight: 600 }}>
               {analysis.translation}
             </span>
@@ -197,6 +205,55 @@ export function WordModal({
           <Row label="Definition">
             <span style={{ color: 'var(--color-ink-soft)' }}>{analysis.definition}</span>
           </Row>
+
+          {analysis.plural && (
+            <Row label="Plural · الجمع">
+              <span
+                className="arabic"
+                dir="rtl"
+                style={{ fontSize: '1.25rem', color: 'var(--color-ink)' }}
+              >
+                {analysis.plural}
+              </span>
+            </Row>
+          )}
+
+          {analysis.senses && analysis.senses.length > 0 && (
+            <Row label="Meanings · المعاني">
+              <ul className="flex flex-col gap-1">
+                {analysis.senses.map((s, i) => (
+                  <li
+                    key={i}
+                    className="text-sm flex gap-2"
+                    style={{ color: 'var(--color-ink-soft)' }}
+                  >
+                    <span style={{ color: 'var(--color-ink-faint)' }}>{i + 1}.</span>
+                    <span>{s}</span>
+                  </li>
+                ))}
+              </ul>
+            </Row>
+          )}
+
+          {analysis.synonyms && analysis.synonyms.length > 0 && (
+            <Row label="Synonyms · المرادفات">
+              <div className="flex flex-wrap gap-2" dir="rtl">
+                {analysis.synonyms.map((w, i) => (
+                  <WordChip key={i} text={w} />
+                ))}
+              </div>
+            </Row>
+          )}
+
+          {analysis.antonyms && analysis.antonyms.length > 0 && (
+            <Row label="Antonyms · الأضداد">
+              <div className="flex flex-wrap gap-2" dir="rtl">
+                {analysis.antonyms.map((w, i) => (
+                  <WordChip key={i} text={w} variant="antonym" />
+                ))}
+              </div>
+            </Row>
+          )}
 
           {sentence && analysis.sentence_translation && (
             <Row label="Sentence">
@@ -290,4 +347,29 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
       <div className="text-sm leading-relaxed">{children}</div>
     </div>
   )
+}
+
+function WordChip({ text, variant }: { text: string; variant?: 'antonym' }) {
+  return (
+    <span
+      className="arabic px-2.5 py-1 rounded-sm"
+      dir="rtl"
+      style={{
+        fontSize: '1.05rem',
+        lineHeight: 1.6,
+        background: variant === 'antonym'
+          ? 'rgba(165, 84, 50, 0.08)'
+          : 'var(--color-surface-sunk)',
+        color: variant === 'antonym' ? '#a55432' : 'var(--color-ink)',
+      }}
+    >
+      {text}
+    </span>
+  )
+}
+
+/** Coerce a JSONB value into a string array safely. */
+function asStringArray(val: unknown): string[] {
+  if (Array.isArray(val)) return val.filter((x): x is string => typeof x === 'string')
+  return []
 }

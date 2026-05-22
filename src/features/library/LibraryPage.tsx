@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, BookOpen, Trash2, Upload } from 'lucide-react'
+import { Plus, BookOpen, Trash2, Upload, ScanText } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
-import { createText, deleteText, listTexts } from '@/lib/queries'
-import { extractFile } from '@/lib/extract'
+import { createText, deleteText, listTexts, ocrImages } from '@/lib/queries'
+import { extractFile, rasterizePdf } from '@/lib/extract'
 import type { Text } from '@/types/database'
 
 export function LibraryPage() {
@@ -175,6 +175,10 @@ function AddTextDialog({
   const [fileName, setFileName] = useState<string | null>(null)
   const [extracting, setExtracting] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  // OCR state
+  const [scannedFile, setScannedFile] = useState<File | null>(null)
+  const [ocrBusy, setOcrBusy] = useState(false)
+  const [ocrStatus, setOcrStatus] = useState<string | null>(null)
 
   useEffect(() => {
     if (open) {
@@ -185,24 +189,76 @@ function AddTextDialog({
       setWarning(null)
       setFileName(null)
       setExtracting(false)
+      setScannedFile(null)
+      setOcrBusy(false)
+      setOcrStatus(null)
     }
   }, [open])
 
   const onFilePicked = async (file: File) => {
     setError(null)
     setWarning(null)
+    setScannedFile(null)
+    setOcrStatus(null)
     setExtracting(true)
     setFileName(file.name)
     try {
       const result = await extractFile(file)
       setTitle((t) => t || result.title)
       setContent(result.content)
-      if (result.warning) setWarning(result.warning)
+      if (result.warning) {
+        setWarning(result.warning)
+        // If it's a PDF that came back empty, it's likely scanned — offer OCR.
+        const isPdf = file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf'
+        if (isPdf) setScannedFile(file)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not read file')
       setFileName(null)
     } finally {
       setExtracting(false)
+    }
+  }
+
+  const runOcr = async () => {
+    if (!scannedFile) return
+    setOcrBusy(true)
+    setError(null)
+    setWarning(null)
+    try {
+      setOcrStatus('Rendering pages…')
+      const pages = await rasterizePdf(scannedFile, {
+        scale: 2.0,
+        maxPages: 30,
+        onProgress: (done, total) => setOcrStatus(`Rendering page ${done} of ${total}…`),
+      })
+
+      // OCR in batches of 3 pages per request to keep payloads reasonable.
+      const BATCH = 3
+      const out: string[] = []
+      for (let i = 0; i < pages.length; i += BATCH) {
+        const batch = pages.slice(i, i + BATCH)
+        setOcrStatus(`Reading pages ${i + 1}–${Math.min(i + BATCH, pages.length)} of ${pages.length}…`)
+        const text = await ocrImages(batch.map((p) => p.data), 'image/jpeg')
+        if (text) out.push(text)
+      }
+
+      const combined = out.join('\n\n').trim()
+      if (!combined) {
+        setError('OCR returned no text. The scan may be too low quality.')
+      } else {
+        setContent(combined)
+        setScannedFile(null)
+        setOcrStatus(`Done — read ${pages.length} page${pages.length === 1 ? '' : 's'}.`)
+      }
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? `OCR failed: ${err.message}`
+          : 'OCR failed. Is the ocr-page function deployed?',
+      )
+    } finally {
+      setOcrBusy(false)
     }
   }
 
@@ -370,6 +426,42 @@ function AddTextDialog({
             {warning}
           </p>
         )}
+
+        {/* OCR offer for scanned PDFs */}
+        {scannedFile && (
+          <div
+            className="flex flex-col gap-3 p-4 rounded-sm"
+            style={{ background: 'var(--color-surface-sunk)' }}
+          >
+            <div className="flex items-start gap-2">
+              <ScanText size={16} strokeWidth={1.5} color="var(--color-accent)" className="mt-0.5" />
+              <p className="text-xs" style={{ color: 'var(--color-ink-soft)' }}>
+                This looks like a scanned PDF (no text layer). Run Arabic OCR to read
+                it with Claude — diacritics preserved. Up to 30 pages, a few seconds each.
+              </p>
+            </div>
+            <Button onClick={runOcr} disabled={ocrBusy} size="sm">
+              <ScanText size={13} strokeWidth={1.5} />
+              {ocrBusy ? 'Running OCR…' : 'Run Arabic OCR'}
+            </Button>
+          </div>
+        )}
+
+        {ocrStatus && (
+          <p
+            className="text-xs flex items-center gap-2"
+            style={{ color: 'var(--color-ink-faint)' }}
+          >
+            {ocrBusy && (
+              <span
+                className="w-1.5 h-1.5 rounded-full animate-pulse"
+                style={{ background: 'var(--color-accent)' }}
+              />
+            )}
+            {ocrStatus}
+          </p>
+        )}
+
         {error && <p className="text-xs" style={{ color: '#a55432' }}>{error}</p>}
 
         <div className="flex justify-end gap-2 mt-2">

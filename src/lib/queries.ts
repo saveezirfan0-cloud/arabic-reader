@@ -123,7 +123,12 @@ export async function getOrCreateVocab(input: {
 
 export async function enrichVocab(
   id: string,
-  patch: Partial<Pick<Vocabulary, 'root' | 'definition' | 'translation' | 'pos' | 'morphology'>>,
+  patch: Partial<
+    Pick<
+      Vocabulary,
+      'root' | 'definition' | 'translation' | 'pos' | 'morphology' | 'plural' | 'synonyms' | 'antonyms' | 'senses'
+    >
+  >,
 ): Promise<Vocabulary> {
   const { data, error } = await supabase
     .from('vocabulary')
@@ -358,6 +363,10 @@ export interface WordAnalysis {
   definition: string
   translation: string
   pos: string
+  plural: string | null
+  synonyms: string[]
+  antonyms: string[]
+  senses: string[]
   morphology: Record<string, unknown>
   sentence_translation: string
 }
@@ -369,4 +378,17 @@ export async function analyzeWord(word: string, sentence: string): Promise<WordA
   if (error) throw error
   if (!data) throw new Error('Empty response from analyze-word')
   return data
+}
+
+/**
+ * OCR a batch of page images (base64, no data: prefix) via the ocr-page
+ * Edge Function. Returns the transcribed Arabic text.
+ */
+export async function ocrImages(images: string[], mediaType = 'image/jpeg'): Promise<string> {
+  const { data, error } = await supabase.functions.invoke<{ text: string }>('ocr-page', {
+    body: { images, mediaType },
+  })
+  if (error) throw error
+  if (!data) throw new Error('Empty response from ocr-page')
+  return data.text
 }
