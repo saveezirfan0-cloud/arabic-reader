@@ -36,6 +36,8 @@ Transcribe ALL Arabic text you see, exactly as written. Rules:
 - Read right-to-left, top-to-bottom, as Arabic is naturally read.
 - Do NOT translate. Do NOT explain. Do NOT add commentary, page numbers you invent, or notes.
 - If a page has headers, footnotes, or page numbers that are part of the scan, include them only if they are clearly body text; skip obvious page furniture.
+- IGNORE watermarks, website URLs (like www.example.org), email addresses, phone/fax numbers, postal addresses, and repeated stamps that scanning services add to every page. Do NOT transcribe them.
+- SKIP publisher front-matter: copyright notices ("جميع الحقوق محفوظة", "لا يسمح بإعادة نشر"), ISBN lines, edition/printing dates, publisher contact blocks. Transcribe only the actual book content (story, chapters, body text).
 - If you cannot read part of the text, transcribe what you can and skip the illegible part rather than guessing wildly.
 
 Output ONLY the transcribed Arabic text. No preamble, no code fences.`

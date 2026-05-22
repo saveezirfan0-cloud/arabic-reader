@@ -39,18 +39,40 @@ function baseName(filename: string): string {
 
 /**
  * Normalize extracted text: convert invisible/exotic spaces to regular spaces,
- * collapse runs of whitespace, and trim. This is critical for uploaded files —
- * PDFs and EPUBs frequently insert non-breaking spaces, zero-width spaces, and
- * other characters that would otherwise break word tokenization in the reader.
+ * collapse runs of whitespace, strip watermark/URL noise, and trim. This is
+ * critical for uploaded files — PDFs and EPUBs frequently insert non-breaking
+ * spaces, zero-width characters, and per-page watermark URLs that would
+ * otherwise pollute the reading text and break word tokenization.
  */
 export function cleanText(raw: string): string {
-  return raw
+  let text = raw
     // Normalize all exotic spaces to a normal space
     .replace(/[\u00A0\u202F\u2060\uFEFF\u2007\u2009]/g, ' ')
     // Remove zero-width characters entirely
     .replace(/[\u200B\u200C\u200D]/g, '')
     // Normalize line endings
     .replace(/\r\n?/g, '\n')
+
+  // Strip URLs and email addresses (common watermarks on scanned books).
+  text = text
+    .replace(/https?:\/\/\S+/gi, '')
+    .replace(/www\.[^\s]+/gi, '')
+    .replace(/\b[\w.+-]+@[\w-]+\.[\w.-]+\b/gi, '')
+
+  // Drop lines that contain NO Arabic at all (page numbers, watermarks,
+  // running headers in Latin, stray punctuation). Keep blank lines as breaks.
+  const arabicTest = /[\u0600-\u06FF]/
+  text = text
+    .split('\n')
+    .filter((line) => {
+      const t = line.trim()
+      if (t === '') return true // preserve paragraph breaks
+      // Keep the line only if it actually contains Arabic.
+      return arabicTest.test(t)
+    })
+    .join('\n')
+
+  return text
     // Collapse 3+ newlines to a paragraph break
     .replace(/\n{3,}/g, '\n\n')
     // Collapse runs of spaces/tabs (but keep newlines)

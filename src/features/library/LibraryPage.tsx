@@ -4,7 +4,7 @@ import { Plus, BookOpen, Trash2, Upload, ScanText } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { createText, deleteText, listTexts, ocrImages } from '@/lib/queries'
-import { extractFile, rasterizePdf, pdfPageCount } from '@/lib/extract'
+import { extractFile, rasterizePdf, pdfPageCount, cleanText } from '@/lib/extract'
 import type { Text } from '@/types/database'
 
 export function LibraryPage() {
@@ -270,9 +270,9 @@ function AddTextDialog({
         if (text) out.push(text)
       }
 
-      const combined = out.join('\n\n').trim()
+      const combined = cleanText(out.join('\n\n').trim())
       if (!combined) {
-        setError('OCR returned no text. The scan may be too low quality.')
+        setError('OCR returned no readable Arabic. The scan may be too low quality.')
       } else {
         setContent(combined)
         setScannedFile(null)
@@ -414,29 +414,37 @@ function AddTextDialog({
               }}
             />
 
-            {/* Preview of extracted text */}
+            {/* Editable extracted/OCR text — trim boilerplate before saving */}
             {content && !extracting && (
               <div>
-                <p
-                  className="text-[10px] uppercase tracking-[0.2em] mb-1.5"
-                  style={{ color: 'var(--color-ink-faint)' }}
-                >
-                  Preview · {content.split(/\s+/).filter(Boolean).length} words
-                </p>
-                <p
-                  className="arabic px-3 py-3 rounded-sm border max-h-40 overflow-auto"
+                <div className="flex items-center justify-between mb-1.5">
+                  <p
+                    className="text-[10px] uppercase tracking-[0.2em]"
+                    style={{ color: 'var(--color-ink-faint)' }}
+                  >
+                    Extracted · {content.split(/\s+/).filter(Boolean).length} words · editable
+                  </p>
+                  <span
+                    className="text-[10px]"
+                    style={{ color: 'var(--color-ink-faint)' }}
+                  >
+                    Delete any front-matter you don't want
+                  </span>
+                </div>
+                <textarea
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
                   dir="rtl"
+                  className="arabic w-full px-3 py-3 rounded-sm border outline-none resize-y"
                   style={{
                     background: 'var(--color-paper)',
                     borderColor: 'var(--color-border)',
-                    color: 'var(--color-ink-soft)',
-                    fontSize: '0.95rem',
-                    lineHeight: 1.8,
+                    color: 'var(--color-ink)',
+                    fontSize: '1.05rem',
+                    lineHeight: 1.9,
+                    minHeight: '220px',
                   }}
-                >
-                  {content.slice(0, 400)}
-                  {content.length > 400 ? '…' : ''}
-                </p>
+                />
               </div>
             )}
           </div>
