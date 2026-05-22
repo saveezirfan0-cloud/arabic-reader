@@ -187,9 +187,15 @@ export function WordModal({
           style={{ background: 'rgba(180, 130, 70, 0.08)', color: 'var(--color-accent-deep)' }}
         >
           <p className="mb-1" style={{ fontWeight: 600 }}>Couldn't load the definition.</p>
-          <p className="text-xs" style={{ color: 'var(--color-ink-soft)' }}>
-            The word-analysis function may not be deployed yet. You can still
-            mark this word as Learning, Known, or Ignore below.
+          <p className="text-xs mb-2" style={{ color: 'var(--color-ink-soft)' }}>
+            You can still mark this word as Learning, Known, or Ignore below, and
+            mining still works (the card just won't have an English gloss).
+          </p>
+          <p
+            className="text-xs font-mono p-2 rounded-sm break-words"
+            style={{ background: 'rgba(165,84,50,0.1)', color: '#a55432' }}
+          >
+            {error}
           </p>
         </div>
       )}

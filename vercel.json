@@ -5,6 +5,9 @@
   "outputDirectory": "dist",
   "devCommand": "npm run dev",
   "installCommand": "npm install",
+  "rewrites": [
+    { "source": "/((?!assets/|fonts/|.*\\.[a-zA-Z0-9]+$).*)", "destination": "/index.html" }
+  ],
   "headers": [
     {
       "source": "/fonts/(.*)",
