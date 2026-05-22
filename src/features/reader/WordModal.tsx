@@ -91,7 +91,7 @@ export function WordModal({
         setAnalyzing(false)
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, token?.start])
+  }, [open, token?.start, vocab?.id])
 
   const onMarkKnown = async () => {
     if (!vocab) return
@@ -147,8 +147,18 @@ export function WordModal({
 
   if (!token) return null
 
+  // Temporary on-screen diagnostics (remove later) — shows internal state so we
+  // can see where analysis breaks without a browser console.
+  const debugInfo = `vocab:${vocab ? 'yes' : 'NULL'} | analyzing:${analyzing} | analysis:${analysis ? 'yes' : 'no'} | err:${error ?? 'none'}`
+
   return (
     <Modal open={open} onClose={onClose} maxWidth="540px">
+      <div
+        className="text-[10px] font-mono mb-3 p-2 rounded-sm break-all"
+        style={{ background: 'rgba(42,31,20,0.06)', color: 'var(--color-ink-faint)' }}
+      >
+        {debugInfo}
+      </div>
       {/* Headword */}
       <div className="text-center mb-5">
         <p
