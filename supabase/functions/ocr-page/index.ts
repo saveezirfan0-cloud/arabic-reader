@@ -13,7 +13,8 @@
 
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY')
 // Vision works best on a stronger model; Sonnet balances quality + cost.
-const MODEL = 'claude-sonnet-4-6'
+// Dated string is the most reliable across API accounts.
+const MODEL = 'claude-sonnet-4-5-20250929'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
