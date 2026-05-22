@@ -23,9 +23,18 @@ export interface ExtractResult {
   warning?: string
 }
 
-/** Strip a file extension for use as a default title. */
+/** Strip a file extension for use as a default title. Decodes %-encoding. */
 function baseName(filename: string): string {
-  return filename.replace(/\.[^.]+$/, '').trim() || 'Untitled'
+  let name = filename.replace(/\.[^.]+$/, '').trim()
+  // Filenames with Arabic characters sometimes arrive percent-encoded.
+  if (/%[0-9A-Fa-f]{2}/.test(name)) {
+    try {
+      name = decodeURIComponent(name)
+    } catch {
+      // leave as-is if it isn't valid encoding
+    }
+  }
+  return name || 'Untitled'
 }
 
 /**
@@ -75,12 +84,23 @@ export async function extractPdf(file: File): Promise<ExtractResult> {
   }
 
   const content = cleanText(pages.join('\n\n'))
-  const warning =
-    content.length < 20
-      ? 'Almost no text was found. This may be a scanned PDF (image-only), which needs OCR — not yet supported.'
-      : undefined
 
-  return { title: baseName(file.name), content, warning }
+  // Detect scanned PDFs by ARABIC content, not raw length. A scanned book
+  // often still has a watermark/URL text layer (e.g. a site address on every
+  // page), which is plenty of characters but zero real Arabic. Count Arabic
+  // letters and compare against page count.
+  const arabicChars = (content.match(/[\u0600-\u06FF]/g) || []).length
+  const arabicPerPage = arabicChars / Math.max(1, pdf.numPages)
+
+  // A genuine Arabic page has dozens-to-hundreds of Arabic letters.
+  // Under ~15 per page means it's almost certainly scanned/image-only.
+  const looksScanned = arabicPerPage < 15
+
+  const warning = looksScanned
+    ? `This looks like a scanned PDF — only ${arabicChars} Arabic characters found across ${pdf.numPages} pages (likely just watermarks). Use OCR to read it.`
+    : undefined
+
+  return { title: baseName(file.name), content: looksScanned ? '' : content, warning }
 }
 
 // ─── EPUB ────────────────────────────────────────────────────────────────
@@ -140,9 +160,14 @@ export interface RasterPage {
  */
 export async function rasterizePdf(
   file: File,
-  opts: { scale?: number; maxPages?: number; onProgress?: (done: number, total: number) => void } = {},
+  opts: {
+    scale?: number
+    startPage?: number
+    endPage?: number
+    onProgress?: (done: number, total: number) => void
+  } = {},
 ): Promise<RasterPage[]> {
-  const { scale = 2.0, maxPages = 30, onProgress } = opts
+  const { scale = 2.0, startPage = 1, endPage, onProgress } = opts
 
   const pdfjsLib = await import('pdfjs-dist')
   pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -152,10 +177,14 @@ export async function rasterizePdf(
 
   const buf = await file.arrayBuffer()
   const pdf = await pdfjsLib.getDocument({ data: buf }).promise
-  const total = Math.min(pdf.numPages, maxPages)
+
+  const from = Math.max(1, startPage)
+  const to = Math.min(pdf.numPages, endPage ?? pdf.numPages)
+  const total = Math.max(0, to - from + 1)
   const pages: RasterPage[] = []
 
-  for (let i = 1; i <= total; i++) {
+  let done = 0
+  for (let i = from; i <= to; i++) {
     const page = await pdf.getPage(i)
     const viewport = page.getViewport({ scale })
 
@@ -167,15 +196,27 @@ export async function rasterizePdf(
 
     await page.render({ canvasContext: ctx, viewport }).promise
 
-    // JPEG keeps size manageable; 0.85 quality is plenty for OCR.
     const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
     const base64 = dataUrl.split(',')[1] ?? ''
     pages.push({ data: base64, pageNumber: i })
 
-    onProgress?.(i, total)
+    done++
+    onProgress?.(done, total)
   }
 
   return pages
+}
+
+/** Get the page count of a PDF without rendering. */
+export async function pdfPageCount(file: File): Promise<number> {
+  const pdfjsLib = await import('pdfjs-dist')
+  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+    'pdfjs-dist/build/pdf.worker.min.mjs',
+    import.meta.url,
+  ).toString()
+  const buf = await file.arrayBuffer()
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise
+  return pdf.numPages
 }
 
 /** Quick check: does this PDF have a usable text layer? */

@@ -4,7 +4,7 @@ import { Plus, BookOpen, Trash2, Upload, ScanText } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { createText, deleteText, listTexts, ocrImages } from '@/lib/queries'
-import { extractFile, rasterizePdf } from '@/lib/extract'
+import { extractFile, rasterizePdf, pdfPageCount } from '@/lib/extract'
 import type { Text } from '@/types/database'
 
 export function LibraryPage() {
@@ -179,6 +179,9 @@ function AddTextDialog({
   const [scannedFile, setScannedFile] = useState<File | null>(null)
   const [ocrBusy, setOcrBusy] = useState(false)
   const [ocrStatus, setOcrStatus] = useState<string | null>(null)
+  const [pageCount, setPageCount] = useState<number | null>(null)
+  const [startPage, setStartPage] = useState(1)
+  const [endPage, setEndPage] = useState(10)
 
   useEffect(() => {
     if (open) {
@@ -192,6 +195,9 @@ function AddTextDialog({
       setScannedFile(null)
       setOcrBusy(false)
       setOcrStatus(null)
+      setPageCount(null)
+      setStartPage(1)
+      setEndPage(10)
     }
   }, [open])
 
@@ -200,6 +206,7 @@ function AddTextDialog({
     setWarning(null)
     setScannedFile(null)
     setOcrStatus(null)
+    setPageCount(null)
     setExtracting(true)
     setFileName(file.name)
     try {
@@ -208,9 +215,18 @@ function AddTextDialog({
       setContent(result.content)
       if (result.warning) {
         setWarning(result.warning)
-        // If it's a PDF that came back empty, it's likely scanned — offer OCR.
+        // If it's a PDF that came back empty/scanned, offer OCR with a range.
         const isPdf = file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf'
-        if (isPdf) setScannedFile(file)
+        if (isPdf) {
+          setScannedFile(file)
+          try {
+            const count = await pdfPageCount(file)
+            setPageCount(count)
+            setEndPage(Math.min(10, count))
+          } catch {
+            setPageCount(null)
+          }
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not read file')
@@ -222,6 +238,14 @@ function AddTextDialog({
 
   const runOcr = async () => {
     if (!scannedFile) return
+    // Clamp the range
+    const from = Math.max(1, Math.min(startPage, pageCount ?? startPage))
+    const to = Math.max(from, Math.min(endPage, pageCount ?? endPage))
+    if (to - from + 1 > 40) {
+      setError('Please OCR at most 40 pages at a time to keep it fast and affordable.')
+      return
+    }
+
     setOcrBusy(true)
     setError(null)
     setWarning(null)
@@ -229,7 +253,8 @@ function AddTextDialog({
       setOcrStatus('Rendering pages…')
       const pages = await rasterizePdf(scannedFile, {
         scale: 2.0,
-        maxPages: 30,
+        startPage: from,
+        endPage: to,
         onProgress: (done, total) => setOcrStatus(`Rendering page ${done} of ${total}…`),
       })
 
@@ -238,7 +263,9 @@ function AddTextDialog({
       const out: string[] = []
       for (let i = 0; i < pages.length; i += BATCH) {
         const batch = pages.slice(i, i + BATCH)
-        setOcrStatus(`Reading pages ${i + 1}–${Math.min(i + BATCH, pages.length)} of ${pages.length}…`)
+        const lo = from + i
+        const hi = Math.min(from + i + BATCH - 1, to)
+        setOcrStatus(`Reading pages ${lo}–${hi} of ${from}–${to}…`)
         const text = await ocrImages(batch.map((p) => p.data), 'image/jpeg')
         if (text) out.push(text)
       }
@@ -249,7 +276,7 @@ function AddTextDialog({
       } else {
         setContent(combined)
         setScannedFile(null)
-        setOcrStatus(`Done — read ${pages.length} page${pages.length === 1 ? '' : 's'}.`)
+        setOcrStatus(`Done — read pages ${from}–${to}.`)
       }
     } catch (err) {
       setError(
@@ -436,14 +463,48 @@ function AddTextDialog({
             <div className="flex items-start gap-2">
               <ScanText size={16} strokeWidth={1.5} color="var(--color-accent)" className="mt-0.5" />
               <p className="text-xs" style={{ color: 'var(--color-ink-soft)' }}>
-                This looks like a scanned PDF (no text layer). Run Arabic OCR to read
-                it with Claude — diacritics preserved. Up to 30 pages, a few seconds each.
+                Scanned PDF detected{pageCount ? ` · ${pageCount} pages` : ''}. Choose a page
+                range and run Arabic OCR (Claude reads the images, preserving tashkeel).
+                Costs roughly $0.02 per page, so start small.
               </p>
             </div>
-            <Button onClick={runOcr} disabled={ocrBusy} size="sm">
-              <ScanText size={13} strokeWidth={1.5} />
-              {ocrBusy ? 'Running OCR…' : 'Run Arabic OCR'}
-            </Button>
+
+            <div className="flex items-end gap-3 flex-wrap">
+              <label className="flex flex-col gap-1">
+                <span className="text-[10px] uppercase tracking-[0.14em]" style={{ color: 'var(--color-ink-faint)' }}>
+                  From page
+                </span>
+                <input
+                  type="number"
+                  min={1}
+                  max={pageCount ?? 9999}
+                  value={startPage}
+                  onChange={(e) => setStartPage(Math.max(1, parseInt(e.target.value) || 1))}
+                  disabled={ocrBusy}
+                  className="w-20 px-2 py-1.5 text-sm rounded-sm border outline-none"
+                  style={{ background: 'var(--color-paper)', borderColor: 'var(--color-border)', color: 'var(--color-ink)' }}
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-[10px] uppercase tracking-[0.14em]" style={{ color: 'var(--color-ink-faint)' }}>
+                  To page
+                </span>
+                <input
+                  type="number"
+                  min={1}
+                  max={pageCount ?? 9999}
+                  value={endPage}
+                  onChange={(e) => setEndPage(Math.max(1, parseInt(e.target.value) || 1))}
+                  disabled={ocrBusy}
+                  className="w-20 px-2 py-1.5 text-sm rounded-sm border outline-none"
+                  style={{ background: 'var(--color-paper)', borderColor: 'var(--color-border)', color: 'var(--color-ink)' }}
+                />
+              </label>
+              <Button onClick={runOcr} disabled={ocrBusy} size="sm">
+                <ScanText size={13} strokeWidth={1.5} />
+                {ocrBusy ? 'Running OCR…' : `OCR ${Math.max(0, endPage - startPage + 1)} pages`}
+              </Button>
+            </div>
           </div>
         )}
 
