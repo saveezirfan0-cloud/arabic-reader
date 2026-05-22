@@ -88,6 +88,16 @@ export function WordModal({
     } finally { setBusy(false) }
   }
 
+  const onMarkLearning = async () => {
+    if (!vocab) return
+    setBusy(true)
+    try {
+      const updated = await setWordState(vocab.id, 'learning')
+      onVocabUpdated(updated)
+      onClose()
+    } finally { setBusy(false) }
+  }
+
   const onIgnore = async () => {
     if (!vocab) return
     setBusy(true)
@@ -156,9 +166,16 @@ export function WordModal({
       )}
 
       {error && !analyzing && (
-        <p className="text-sm text-center py-6" style={{ color: '#a55432' }}>
-          {error}
-        </p>
+        <div
+          className="text-sm py-5 px-4 rounded-sm"
+          style={{ background: 'rgba(180, 130, 70, 0.08)', color: 'var(--color-accent-deep)' }}
+        >
+          <p className="mb-1" style={{ fontWeight: 600 }}>Couldn't load the definition.</p>
+          <p className="text-xs" style={{ color: 'var(--color-ink-soft)' }}>
+            The word-analysis function may not be deployed yet. You can still
+            mark this word as Learning, Known, or Ignore below.
+          </p>
+        </div>
       )}
 
       {analysis && !analyzing && (
@@ -237,23 +254,26 @@ export function WordModal({
         </div>
       )}
 
-      {/* Actions */}
-      {analysis && !analyzing && (
-        <div className="flex flex-wrap gap-2 mt-6 pt-5 border-t border-[var(--color-border)]">
-          <Button onClick={onMine} disabled={busy || mined} size="sm">
-            <BookmarkPlus size={13} strokeWidth={1.5} />
-            {mined ? 'Mined' : 'Mine sentence'}
-          </Button>
-          <Button onClick={onMarkKnown} variant="ghost" disabled={busy} size="sm">
-            <Check size={13} strokeWidth={1.5} />
-            I know this
-          </Button>
-          <Button onClick={onIgnore} variant="subtle" disabled={busy} size="sm">
-            <EyeOff size={13} strokeWidth={1.5} />
-            Ignore
-          </Button>
-        </div>
-      )}
+      {/* Actions — Known/Learning/Ignore always available (no LLM needed).
+          Mine requires analysis since the card back uses the translation. */}
+      <div className="flex flex-wrap gap-2 mt-6 pt-5 border-t border-[var(--color-border)]">
+        <Button onClick={onMine} disabled={busy || mined || !analysis || analyzing} size="sm">
+          <BookmarkPlus size={13} strokeWidth={1.5} />
+          {mined ? 'Mined' : analyzing ? 'Analyzing…' : 'Mine sentence'}
+        </Button>
+        <Button onClick={onMarkLearning} variant="ghost" disabled={busy} size="sm">
+          <BookmarkPlus size={13} strokeWidth={1.5} />
+          Learning
+        </Button>
+        <Button onClick={onMarkKnown} variant="ghost" disabled={busy} size="sm">
+          <Check size={13} strokeWidth={1.5} />
+          I know this
+        </Button>
+        <Button onClick={onIgnore} variant="subtle" disabled={busy} size="sm">
+          <EyeOff size={13} strokeWidth={1.5} />
+          Ignore
+        </Button>
+      </div>
     </Modal>
   )
 }

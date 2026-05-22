@@ -61,6 +61,7 @@ export function AppLayout() {
 
         <nav className="flex items-center gap-6">
           {navItem('/library', 'Library')}
+          {navItem('/mining', 'Mining')}
           {navItem('/review', 'Review', dueCount)}
         </nav>
 

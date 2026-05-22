@@ -4,6 +4,7 @@ import { LoginPage } from '@/features/auth/LoginPage'
 import { AppLayout } from '@/features/auth/AppLayout'
 import { LibraryPage } from '@/features/library/LibraryPage'
 import { ReaderPage } from '@/features/reader/ReaderPage'
+import { MiningPage } from '@/features/mining/MiningPage'
 import { ReviewPage } from '@/features/review/ReviewPage'
 
 export default function App() {
@@ -17,6 +18,7 @@ export default function App() {
               <Route path="/" element={<Navigate to="/library" replace />} />
               <Route path="/library" element={<LibraryPage />} />
               <Route path="/library/:id" element={<ReaderPage />} />
+              <Route path="/mining" element={<MiningPage />} />
               <Route path="/review" element={<ReviewPage />} />
             </Route>
           </Route>

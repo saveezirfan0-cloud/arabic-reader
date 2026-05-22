@@ -212,6 +212,104 @@ export async function countNewCards(): Promise<number> {
   return count ?? 0
 }
 
+// ─── Mining inbox ────────────────────────────────────────────────────────
+
+export type CardFilter = 'all' | 'due' | 'new' | 'learning' | 'mastered' | 'suspended'
+
+/** A card joined with its source text title (for the inbox list). */
+export interface CardWithText extends Card {
+  text_title: string | null
+}
+
+export async function listAllCards(filter: CardFilter = 'all'): Promise<CardWithText[]> {
+  let query = supabase
+    .from('cards')
+    .select('*')
+    .order('created_at', { ascending: false })
+
+  const nowIso = new Date().toISOString()
+
+  if (filter === 'due') {
+    query = query.eq('suspended', false).lte('next_review_at', nowIso)
+  } else if (filter === 'new') {
+    query = query.is('last_reviewed_at', null)
+  } else if (filter === 'suspended') {
+    query = query.eq('suspended', true)
+  } else if (filter === 'mastered') {
+    query = query.gte('interval_days', 21).eq('suspended', false)
+  } else if (filter === 'learning') {
+    query = query.not('last_reviewed_at', 'is', null).lt('interval_days', 21).eq('suspended', false)
+  }
+
+  const { data: cards, error } = await query
+  if (error) throw error
+  if (!cards || cards.length === 0) return []
+
+  // Fetch the titles of the source texts in one query, then map them in.
+  const textIds = [...new Set(cards.map((c) => c.text_id).filter(Boolean))] as string[]
+  const titleMap = new Map<string, string>()
+  if (textIds.length > 0) {
+    const { data: texts } = await supabase
+      .from('texts')
+      .select('id, title')
+      .in('id', textIds)
+    for (const t of texts ?? []) titleMap.set(t.id, t.title)
+  }
+
+  return cards.map((card) => ({
+    ...card,
+    text_title: card.text_id ? titleMap.get(card.text_id) ?? null : null,
+  }))
+}
+
+export interface CardStats {
+  total: number
+  due: number
+  new: number
+  learning: number
+  mastered: number
+  suspended: number
+}
+
+export async function getCardStats(): Promise<CardStats> {
+  const nowIso = new Date().toISOString()
+  const head = { count: 'exact' as const, head: true }
+
+  const [total, due, fresh, mastered, suspended] = await Promise.all([
+    supabase.from('cards').select('*', head),
+    supabase.from('cards').select('*', head).eq('suspended', false).lte('next_review_at', nowIso),
+    supabase.from('cards').select('*', head).is('last_reviewed_at', null),
+    supabase.from('cards').select('*', head).gte('interval_days', 21).eq('suspended', false),
+    supabase.from('cards').select('*', head).eq('suspended', true),
+  ])
+
+  const totalC = total.count ?? 0
+  const newC = fresh.count ?? 0
+  const masteredC = mastered.count ?? 0
+  const suspendedC = suspended.count ?? 0
+  // learning = everything not new, not mastered, not suspended
+  const learningC = Math.max(0, totalC - newC - masteredC - suspendedC)
+
+  return {
+    total: totalC,
+    due: due.count ?? 0,
+    new: newC,
+    learning: learningC,
+    mastered: masteredC,
+    suspended: suspendedC,
+  }
+}
+
+export async function deleteCard(id: string): Promise<void> {
+  const { error } = await supabase.from('cards').delete().eq('id', id)
+  if (error) throw error
+}
+
+export async function setCardSuspended(id: string, suspended: boolean): Promise<void> {
+  const { error } = await supabase.from('cards').update({ suspended }).eq('id', id)
+  if (error) throw error
+}
+
 export async function reviewCard(card: Card, rating: Rating): Promise<Card> {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Not authenticated')
